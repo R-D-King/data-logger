@@ -15,7 +15,7 @@ from pathlib import Path
 
 # Load configuration
 def load_config():
-    config_path = Path(__file__).parent / 'data_logger.json'
+    config_path = Path(__file__).parent / 'sensor_logger.json'
     with open(config_path, 'r') as f:
         return json.load(f)
 
@@ -31,9 +31,9 @@ def initialize_hardware():
     spi.open(0, 0)  # Open SPI bus 0, device 0
     spi.max_speed_hz = 1000000  # Set SPI speed to 1MHz
     
-    # DHT22 setup
+    # DHT22 setup - use Raspberry Pi GPIO pin numbering
     dht_pin = 26
-    dht_sensor = adafruit_dht.DHT22(getattr(board, f"D{dht_pin}"))
+    dht_sensor = adafruit_dht.DHT22(dht_pin)  # On Raspberry Pi, you can pass the pin number directly
     
     # I2C setup for BMP180
     bus = smbus.SMBus(1)  # Use I2C bus 1 on Raspberry Pi
