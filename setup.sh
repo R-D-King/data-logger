@@ -45,7 +45,7 @@ pip install adafruit-circuitpython-dht
 pip install board
 pip install spidev
 pip install RPi.GPIO
-pip install smbus2
+pip install smbus
 
 # Create data directory from config
 DATA_DIR=$(python3 -c "import json; print(json.load(open('sensor_logger.json'))['logger']['data_folder'])")

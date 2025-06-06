@@ -31,9 +31,23 @@ def initialize_hardware():
     spi.open(0, 0)  # Open SPI bus 0, device 0
     spi.max_speed_hz = 1000000  # Set SPI speed to 1MHz
     
-    # DHT22 setup - use Raspberry Pi GPIO pin numbering
-    dht_pin = 26
-    dht_sensor = adafruit_dht.DHT22(dht_pin)  # On Raspberry Pi, you can pass the pin number directly
+    # DHT22 setup - use proper board pin definition
+    import board
+    try:
+        # Try using the board's pin definitions
+        if hasattr(board, 'D26'):
+            dht_pin = board.D26
+        elif hasattr(board, 'GPIO26'):
+            dht_pin = board.GPIO26
+        else:
+            # For Raspberry Pi, we can use the BCM pin numbering
+            from adafruit_blinka.microcontroller.bcm283x.pin import Pin
+            dht_pin = Pin(26)
+            
+        dht_sensor = adafruit_dht.DHT22(dht_pin)
+    except Exception as e:
+        logging.error(f"Error initializing DHT22: {e}")
+        raise
     
     # I2C setup for BMP180
     bus = smbus.SMBus(1)  # Use I2C bus 1 on Raspberry Pi
