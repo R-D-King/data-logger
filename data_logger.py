@@ -15,7 +15,7 @@ from pathlib import Path
 
 # Load configuration
 def load_config():
-    config_path = Path(__file__).parent / 'sensor_logger.json'
+    config_path = Path(__file__).parent / 'data_logger.json'
     with open(config_path, 'r') as f:
         return json.load(f)
 
@@ -102,7 +102,7 @@ def readBmp180Id(bus, addr=DEVICE):
     return (chip_id, chip_version)
 
 def readBmp180(bus, addr=DEVICE):
-    """Read temperature, pressure and altitude from BMP180 sensor"""
+    """Read pressure from BMP180 sensor"""
     # Register addresses
     REG_CALIB  = 0xAA
     REG_MEAS   = 0xF4
@@ -129,7 +129,7 @@ def readBmp180(bus, addr=DEVICE):
         MC  = getShort(cal, 18)
         MD  = getShort(cal, 20)
 
-        # Request temperature measurement
+        # Request temperature measurement (needed for pressure calculation)
         bus.write_byte_data(addr, REG_MEAS, CRV_TEMP)
         time.sleep(0.005)  # Wait for measurement
         msb, lsb = bus.read_i2c_block_data(addr, REG_MSB, 2)
@@ -141,12 +141,10 @@ def readBmp180(bus, addr=DEVICE):
         msb, lsb, xsb = bus.read_i2c_block_data(addr, REG_MSB, 3)
         UP = ((msb << 16) + (lsb << 8) + xsb) >> (8 - OVERSAMPLE)
 
-        # Calculate true temperature
+        # Calculate true temperature (needed for pressure calculation)
         X1 = ((UT - AC6) * AC5) >> 15
         X2 = int((MC << 11) / (X1 + MD))
         B5 = X1 + X2
-        temperature = int(B5 + 8) >> 4
-        temperature = temperature / 10.0
 
         # Calculate true pressure
         B6 = B5 - 4000
@@ -171,14 +169,10 @@ def readBmp180(bus, addr=DEVICE):
         pressure = P + ((X1 + X2 + 3791) >> 4)
         pressure = pressure / 100.0  # Convert to hPa
 
-        # Calculate altitude using pressure
-        altitude = 44330.0 * (1.0 - pow(pressure / 1013.25, 1.0 / 5.255))
-        altitude = round(altitude, 2)
-
-        return (temperature, pressure, altitude)
+        return pressure
     except Exception as e:
         logging.error(f"Error reading BMP180 sensor: {e}")
-        return (None, None, None)
+        return None
 
 # Read DHT22 sensor with error handling
 def read_dht22(dht_sensor):
@@ -218,21 +212,20 @@ def read_all_sensors(spi, dht_sensor, bus, config):
         logging.error(f"Error reading rain sensor: {e}")
         rain_level = None
 
-    # Read temperature and humidity
+    # Read temperature and humidity from DHT22
     temperature, humidity = read_dht22(dht_sensor)
 
     # Read pressure sensor
-    bmp_temp, pressure, altitude = readBmp180(bus)
+    pressure = readBmp180(bus)
 
     # Validate readings if enabled
     if config['validation']['enabled']:
         limits = config['validation']['limits']
         
-        # Validate temperature (prefer DHT22, fallback to BMP180)
-        temp_to_use = temperature if temperature is not None else bmp_temp
-        if temp_to_use is not None:
-            if not (limits['temperature']['min'] <= temp_to_use <= limits['temperature']['max']):
-                logging.warning(f"Temperature {temp_to_use}°C outside valid range")
+        # Validate temperature (DHT22 only)
+        if temperature is not None:
+            if not (limits['temperature']['min'] <= temperature <= limits['temperature']['max']):
+                logging.warning(f"Temperature {temperature}°C outside valid range")
         
         # Validate humidity
         if humidity is not None:
@@ -268,7 +261,6 @@ def read_all_sensors(spi, dht_sensor, bus, config):
         'light_level': light_level,  # %
         'rain_level': rain_level,  # %
         'pressure': pressure,  # hPa
-        'altitude': altitude,  # m
     }
 
 # Setup CSV logging
@@ -317,8 +309,7 @@ def log_data(csv_writer, data):
         data['soil_moisture'],
         data['light_level'],
         data['rain_level'],
-        data['pressure'],
-        data['altitude']
+        data['pressure']
     ]
     csv_writer.writerow(row)
 
